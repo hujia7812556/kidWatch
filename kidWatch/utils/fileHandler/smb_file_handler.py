@@ -47,9 +47,8 @@ class SmbFileHandler(FileHandler, ABC):
         for file in file_list[:100]:
             print(file)
 
-
     def _list_video_files(self, path):
-        files = smbclient.scandir(rf"\\{self._host}\{self._shared_folder}\{path}", port=self._port)
+        files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
         file_list = []
         for file in files:
             if file.name.startswith('.') or file.name.startswith('@'):
