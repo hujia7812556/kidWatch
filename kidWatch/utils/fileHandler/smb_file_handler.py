@@ -1,6 +1,4 @@
 import asyncio
-import time
-from concurrent.futures import ThreadPoolExecutor
 import itertools
 from abc import ABC
 import smbclient
@@ -44,60 +42,21 @@ class SmbFileHandler(FileHandler, ABC):
             raise
 
     def list_video_files(self, path=''):
-        start_time = time.time()
-        asyncio.run(self._list_video_files_main(path))
-        print(time.time() - start_time)
-        # self._get_registered()
-        # file_list = self._list_video_files(path)
-        # for file in file_list[:100]:
-        #     print(file)
+        self._get_registered()
+        file_list = self._list_video_files(path)
+        for file in file_list[:100]:
+            print(file)
 
-    # def _list_video_files(self, path):
-    #     files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
-    #     file_list = []
-    #     for file in files:
-    #         if file.name.startswith('.') or file.name.startswith('@'):
-    #             continue
-    #         if file.is_dir():
-    #             sub_file_list = self._list_video_files(f"{path}/{file.name}")
-    #             file_list = list(itertools.chain(file_list, sub_file_list))
-    #         else:
-    #             if file.name.endswith('.mp4'):
-    #                 file_list.append(f"{path}/{file.name}")
-    #     return file_list
-
-    async def _async_list_video_files(self, executor, path):
-        files = await self.async_list_video_files(executor, path)
+    def _list_video_files(self, path):
+        files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
         file_list = []
         for file in files:
             if file.name.startswith('.') or file.name.startswith('@'):
                 continue
             if file.is_dir():
-                sub_file_list = await self._async_list_video_files(executor, f"{path}/{file.name}")
+                sub_file_list = self._list_video_files(f"{path}/{file.name}")
                 file_list = list(itertools.chain(file_list, sub_file_list))
             else:
                 if file.name.endswith('.mp4'):
                     file_list.append(f"{path}/{file.name}")
         return file_list
-
-    async def _list_video_files_main(self, path=''):
-        # 限制线程池大小为10个线程
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            # 开始递归遍历文件夹
-            all_files = await self._async_list_video_files(executor, path)
-            for file in all_files:
-                print(file)
-
-    # 同步函数：列出文件夹中的文件并返回列表
-    def _list_video_files(self, path):
-        try:
-            return smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port, username=self._username, password=self._password)
-        except Exception as e:
-            print(f"Error listing files in {path}: {e}")
-            return []
-
-    # 异步函数：将同步操作放入线程池中执行
-    async def async_list_video_files(self, executor, path):
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(executor, self._list_video_files, path)
-
