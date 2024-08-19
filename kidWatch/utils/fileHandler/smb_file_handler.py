@@ -1,6 +1,6 @@
-import asyncio
 import itertools
 from abc import ABC
+
 import smbclient
 from smbprotocol.exceptions import SMBException
 
@@ -43,9 +43,7 @@ class SmbFileHandler(FileHandler, ABC):
 
     def list_video_files(self, path=''):
         self._get_registered()
-        file_list = self._list_video_files(path)
-        for file in file_list[:100]:
-            print(file)
+        return self._list_video_files(path)
 
     def _list_video_files(self, path):
         files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
