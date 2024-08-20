@@ -1,2 +1,3 @@
-.idea/*
+.idea
+__py_cache__
 kidWatch/config/config.yaml
