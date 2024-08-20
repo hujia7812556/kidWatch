@@ -1,3 +1,7 @@
 .idea
 __py_cache__
 kidWatch/config/config.yaml
+data/intermediate/*
+!data/intermediate/
+data/raw/*
+!data/raw/
