@@ -5,13 +5,9 @@ from utils import FileHandlerFactory
 from utils import ConfigReader
 
 
-def getOutfilePath():
-    return ConfigReader.get_config('project_path')
-
-
 class SampleVideoFiles:
-    def __init__(self, method):
-        self.method = method
+    def __init__(self):
+        method = ConfigReader().get_config('nas_connect_method')
         self.file_handler = FileHandlerFactory.get_file_handler(method)
 
     # 采样
@@ -31,11 +27,13 @@ class SampleVideoFiles:
 
 
 if __name__ == "__main__":
-    file_op = SampleVideoFiles(method='smb')
+    file_op = SampleVideoFiles()
     parser = argparse.ArgumentParser(description='根据输入参数执行不同的方法')
 
     # 添加参数
-    parser.add_argument('-o', '--outfile', type=str, default='sample_video_files.csv', help="输出文件相对路径，文件保存在data目录下")
+    parser.add_argument('-o', '--outfile', type=str,
+                        default='sample_video_files.csv',
+                        help="输出文件相对路径，文件保存在data目录下")
 
     # 解析参数
     args = parser.parse_args()

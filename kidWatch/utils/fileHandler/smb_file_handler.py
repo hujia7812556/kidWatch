@@ -45,6 +45,21 @@ class SmbFileHandler(FileHandler, ABC):
         self._get_registered()
         return self._list_video_files(path)
 
+    def list_files(self, path='', excludes=[]):
+        self._get_registered()
+        files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
+        file_list = []
+        for file in files:
+            if file.name in excludes:
+                continue
+            file_list.append(file.name)
+        return file_list
+
+    def read(self, path, mode='rb'):
+        self._get_registered()
+        with smbclient.open_file(f"{self._host}/{self._shared_folder}/{path}", mode=mode, port=self._port) as file:
+            return file.read()
+
     def _list_video_files(self, path):
         files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
         file_list = []
