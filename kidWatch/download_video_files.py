@@ -33,7 +33,6 @@ class DownloadVideoFiles:
                     try:
                         # 删除文件
                         os.remove(file_path)
-                        print(f'已删除文件: {file_path}')
                     except Exception as e:
                         print(f'删除文件 {file_path} 时出错: {e}')
 

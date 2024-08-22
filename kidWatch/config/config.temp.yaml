@@ -1,0 +1,16 @@
+project_path:
+nas_connect_method:
+is_internal: false
+smb_internal:
+  host:
+  port:
+  shared_folder:
+  username:
+  password:
+smb:
+  host:
+  port:
+  shared_folder:
+  username:
+  password:
+
