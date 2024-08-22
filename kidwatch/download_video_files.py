@@ -3,6 +3,7 @@ import itertools
 import os
 import shutil
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from utils import FileHandlerFactory
 from utils import ConfigReader
@@ -14,20 +15,20 @@ class DownloadVideoFiles:
         self.file_handler = FileHandlerFactory.get_file_handler(method)
 
     def download_video_files(self, subdir=None, date=None):
-        paths = self.list_video_files(subdir, date)
-        project_path = ConfigReader.get_root_path()
-        download_dirname = f'{project_path}/data/raw/downloads'
-        with tempfile.TemporaryDirectory(dir=download_dirname) as temp_dirname:
-            for path in paths:
-                file_name = os.path.basename(path)
-                tmp_path = f'{temp_dirname}/{file_name}'
-                self.download_file(path, tmp_path)
+        remote_file_paths = self.list_video_files(subdir, date)
+        root_dir_path = ConfigReader.get_root_path()
+        download_dir_path = f'{root_dir_path}/data/raw/downloads'
+        with tempfile.TemporaryDirectory(dir=download_dir_path) as temp_dir_path:
+            for remote_file_path in remote_file_paths:
+                file_name = os.path.basename(remote_file_path)
+                temp_file_path = f'{temp_dir_path}/{file_name}'
+                self.download_file(remote_file_path, temp_file_path)
 
             # 清空原来目录
-            for file_name in os.listdir(download_dirname):
+            for file_name in os.listdir(download_dir_path):
                 if file_name.endswith('.mp4'):
                     # 构造完整的文件路径
-                    file_path = os.path.join(download_dirname, file_name)
+                    file_path = os.path.join(download_dir_path, file_name)
                     try:
                         # 删除文件
                         os.remove(file_path)
@@ -35,8 +36,41 @@ class DownloadVideoFiles:
                         print(f'删除文件 {file_path} 时出错: {e}')
 
             # 移动新下载的文件
-            for file_name in os.listdir(temp_dirname):
-                shutil.move(f'{temp_dirname}/{file_name}', f'{download_dirname}/{file_name}')
+            for file_name in os.listdir(temp_dir_path):
+                shutil.move(f'{temp_dir_path}/{file_name}', f'{download_dir_path}/{file_name}')
+
+    def concurrent_download_video_files(self, subdir=None, date=None):
+        remote_file_paths = self.list_video_files(subdir, date)
+        root_dir_path = ConfigReader.get_root_path()
+        download_dir_path = f'{root_dir_path}/data/raw/downloads'
+        with tempfile.TemporaryDirectory(dir=download_dir_path) as temp_dir_path:
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = []
+                for remote_file_path in remote_file_paths:
+                    file_name = os.path.basename(remote_file_path)
+                    temp_file_path = f'{temp_dir_path}/{file_name}'
+                    futures.append(executor.submit(self.download_file, remote_file_path, temp_file_path))
+                # 等待所有任务完成
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        print(f"Failed to download: {exc}")
+            # 清空原来目录
+            for file_name in os.listdir(download_dir_path):
+                if file_name.endswith('.mp4'):
+                    # 构造完整的文件路径
+                    file_path = os.path.join(download_dir_path, file_name)
+                    try:
+                        # 删除文件
+                        os.remove(file_path)
+                    except Exception as e:
+                        print(f'删除文件 {file_path} 时出错: {e}')
+
+            # 移动新下载的文件
+            for file_name in os.listdir(temp_dir_path):
+                shutil.move(f'{temp_dir_path}/{file_name}', f'{download_dir_path}/{file_name}')
+
 
     def list_video_files(self, subdir=None, date=None):
         files = self.file_handler.list_files(path='', excludes=['.DS_Store'])
@@ -59,8 +93,8 @@ class DownloadVideoFiles:
         return video_files
 
     def download_file(self, remote_path, local_path):
-        with open(local_path, 'wb') as local_file:
-            local_file.write(self.file_handler.read(remote_path))
+        with open(local_path, 'wb') as local_file_stream:
+            local_file_stream.write(self.file_handler.read(remote_path))
 
 
 if __name__ == "__main__":
@@ -78,3 +112,4 @@ if __name__ == "__main__":
     subdir = args.subdir
     date = args.date
     download_video_file.download_video_files(subdir, date)
+    # download_video_file.concurrent_download_video_files(subdir, date)
