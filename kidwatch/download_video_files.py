@@ -15,7 +15,7 @@ class DownloadVideoFiles:
 
     def download_video_files(self, subdir=None, date=None):
         paths = self.list_video_files(subdir, date)
-        project_path = ConfigReader().get_config('project_path')
+        project_path = ConfigReader.get_root_path()
         download_dirname = f'{project_path}/data/raw/downloads'
         with tempfile.TemporaryDirectory(dir=download_dirname) as temp_dirname:
             for path in paths:

@@ -3,6 +3,11 @@ import os
 import yaml
 
 
+def get_root_path():
+    config_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return config_path
+
+
 class ConfigReader:
     _instance = None
 
@@ -13,7 +18,7 @@ class ConfigReader:
         return cls._instance
 
     def _initialize(self):
-        config_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/config/config.yaml'
+        config_path = ConfigReader.get_root_path() + '/kidwatch/config/config.yaml'
         with open(config_path, 'r', encoding='utf-8') as file:
             self.config = yaml.safe_load(file)
         self.is_internal = self.get_config('is_internal')
@@ -23,3 +28,7 @@ class ConfigReader:
 
     def get_smb_config(self):
         return self.get_config('smb_internal') if self.is_internal else self.get_config('smb')
+
+    @staticmethod
+    def get_root_path():
+        return os.path.abspath(__file__ + '../../../../')

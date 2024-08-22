@@ -16,7 +16,7 @@ class SampleVideoFiles:
 
         random.seed(20240819)
         sampled_files = random.sample(files, 1000)
-        project_path = ConfigReader().get_config('project_path')
+        project_path = ConfigReader.get_root_path()
         filename = f'{project_path}/data/intermediate/{outfile}'
         # 打开文件并写入数据
         with open(filename, mode='w', newline="", encoding='utf-8') as file:
