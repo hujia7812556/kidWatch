@@ -1,5 +1,5 @@
 .idea
 __pycache__
-kidWatch/config/config.yaml
+kidwatch/config/config.yaml
 *.csv
 *.mp4

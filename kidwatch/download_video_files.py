@@ -18,12 +18,10 @@ class DownloadVideoFiles:
         project_path = ConfigReader().get_config('project_path')
         download_dirname = f'{project_path}/data/raw/downloads'
         with tempfile.TemporaryDirectory(dir=download_dirname) as temp_dirname:
-            print(temp_dirname)
             for path in paths:
                 file_name = os.path.basename(path)
                 tmp_path = f'{temp_dirname}/{file_name}'
-                with open(tmp_path, 'wb') as local_file:
-                    local_file.write(self.file_handler.read(path))
+                self.download_file(path, tmp_path)
 
             # 清空原来目录
             for file_name in os.listdir(download_dirname):
@@ -39,9 +37,6 @@ class DownloadVideoFiles:
             # 移动新下载的文件
             for file_name in os.listdir(temp_dirname):
                 shutil.move(f'{temp_dirname}/{file_name}', f'{download_dirname}/{file_name}')
-
-
-
 
     def list_video_files(self, subdir=None, date=None):
         files = self.file_handler.list_files(path='', excludes=['.DS_Store'])
@@ -62,6 +57,10 @@ class DownloadVideoFiles:
             sub_video_files = self.file_handler.list_video_files(path)
             video_files = list(itertools.chain(video_files, sub_video_files))
         return video_files
+
+    def download_file(self, remote_path, local_path):
+        with open(local_path, 'wb') as local_file:
+            local_file.write(self.file_handler.read(remote_path))
 
 
 if __name__ == "__main__":

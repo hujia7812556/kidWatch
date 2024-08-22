@@ -13,7 +13,8 @@ class ConfigReader:
         return cls._instance
 
     def _initialize(self):
-        with open(os.getcwd() + '/config/config.yaml', 'r', encoding='utf-8') as file:
+        config_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/config/config.yaml'
+        with open(config_path, 'r', encoding='utf-8') as file:
             self.config = yaml.safe_load(file)
         self.is_internal = self.get_config('is_internal')
 
