@@ -16,15 +16,7 @@ class FileHandler(ABC):
     @abstractmethod
     def read(self, path, mode='rb'):
         pass
-    #
-    # @abstractmethod
-    # def delete(self, path):
-    #     pass
-    #
-    # @abstractmethod
-    # def copy(self, source, destination):
-    #     pass
-    #
-    # @abstractmethod
-    # def move(self, source, destination):
-    #     pass
+
+    @abstractmethod
+    def path_exists(self, path):
+        pass

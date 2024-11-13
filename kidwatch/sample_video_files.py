@@ -1,8 +1,8 @@
 import argparse
 import csv
 import random
-from utils import FileHandlerFactory
-from utils import ConfigReader
+from .utils import FileHandlerFactory
+from .utils import ConfigReader
 
 
 class SampleVideoFiles:

@@ -73,3 +73,11 @@ class SmbFileHandler(FileHandler, ABC):
                 if file.name.endswith('.mp4'):
                     file_list.append(f"{path}/{file.name}")
         return file_list
+
+    def path_exists(self, path):
+        self._get_registered()
+        try:
+            smbclient.stat(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
+            return True
+        except:
+            return False

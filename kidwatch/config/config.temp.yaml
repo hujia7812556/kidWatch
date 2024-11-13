@@ -12,4 +12,8 @@ smb:
   shared_folder:
   username:
   password:
+notify:
+  url:
+  api_token:
+  user_id:
 
