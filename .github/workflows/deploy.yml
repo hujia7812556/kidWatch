@@ -12,7 +12,7 @@ env:
 jobs:
   # 获取部署配置
   get-deploy-config:
-    uses: hujia7812556/reusable-workflows/.github/workflows/deploy.yml@main
+    uses: hujia7812556/reusable-workflow/.github/workflows/deploy.yml@main
     with:
       environment: prod
 
