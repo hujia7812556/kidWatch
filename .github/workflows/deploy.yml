@@ -32,6 +32,7 @@ jobs:
         run: |
           mkdir -p kidwatch/config
           echo "${{ secrets.CONFIG_YAML }}" > kidwatch/config/config.yaml
+          echo "${{ needs.get-deploy-config.outputs.deploy_user }}"
 
       - name: Deploy files
         uses: burnett01/rsync-deployments@5.2.1
