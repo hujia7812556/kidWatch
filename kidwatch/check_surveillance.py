@@ -1,13 +1,11 @@
 import argparse
 from datetime import datetime, timedelta
 import requests
-from .utils import ConfigReader, FileHandlerFactory
+from .utils.base_handler import BaseHandler
 
-class SurveillanceChecker:
+class CheckerSurveillance(BaseHandler):
     def __init__(self):
-        self.config_reader = ConfigReader()
-        method = self.config_reader.get_config('nas_connect_method')
-        self.file_handler = FileHandlerFactory.get_file_handler(method)
+        super().__init__()
         self.notify_config = self.config_reader.get_config('notify')
 
     def get_camera_files_count(self, camera, date_str):
@@ -109,7 +107,7 @@ class SurveillanceChecker:
             "summary": "监控同步nas中断",
             "content": content,
             "extra": {
-                "user_id": self.notify_config['user_id']
+                "topic_id": self.notify_config['topic_id']
             }
         }
         
@@ -126,5 +124,5 @@ if __name__ == "__main__":
                        help='指定检查日期，格式为YYYYMMDD，例如：20240301。不指定则检查昨天的文件。')
     
     args = parser.parse_args()
-    checker = SurveillanceChecker()
+    checker = CheckerSurveillance()
     checker.check_files(args.date) 

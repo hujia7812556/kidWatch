@@ -1,14 +1,12 @@
 import argparse
 import csv
 import random
-from .utils import FileHandlerFactory
-from .utils import ConfigReader
+from .utils.base_handler import BaseHandler
 
 
-class SampleVideoFiles:
+class SampleVideoFiles(BaseHandler):
     def __init__(self):
-        method = ConfigReader().get_config('nas_connect_method')
-        self.file_handler = FileHandlerFactory.get_file_handler(method)
+        super().__init__()
 
     # 采样
     def sample_video_files(self, outfile):

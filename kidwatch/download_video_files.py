@@ -4,15 +4,12 @@ import os
 import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from utils import FileHandlerFactory
-from utils import ConfigReader
+from .utils.base_handler import BaseHandler
 
 
-class DownloadVideoFiles:
+class DownloadVideoFiles(BaseHandler):
     def __init__(self):
-        method = ConfigReader().get_config('nas_connect_method')
-        self.file_handler = FileHandlerFactory.get_file_handler(method)
+        super().__init__()
 
     def download_video_files(self, subdir=None, date=None):
         remote_file_paths = self.list_video_files(subdir, date)
