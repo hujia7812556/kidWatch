@@ -50,23 +50,44 @@ class SurveillanceChecker:
             current_date -= timedelta(days=1)
         return None, 0
 
-    def check_yesterday_files(self):
-        # 获取昨天的日期
-        yesterday = datetime.now() - timedelta(days=1)
-        yesterday_str = yesterday.strftime('%Y%m%d')
+    def check_files(self, check_date=None):
+        """检查指定日期或昨天的文件"""
+        if check_date:
+            # 如果指定了日期，解析日期字符串
+            try:
+                target_date = datetime.strptime(check_date, '%Y%m%d')
+                next_date = target_date + timedelta(days=1)
+            except ValueError:
+                print(f"日期格式错误，应为YYYYMMDD，例如：20240301")
+                return
+        else:
+            # 没有指定日期，使用昨天的日期
+            next_date = datetime.now()
+            target_date = next_date - timedelta(days=1)
+
+        target_date_str = target_date.strftime('%Y%m%d')
+        next_date_str = next_date.strftime('%Y%m%d')
         
         # 检查所有摄像头目录
         cameras = self.file_handler.list_files(path='', excludes=['.DS_Store'])
         
         for camera in cameras:
-            # 获取昨天的文件数
-            yesterday_files = self.get_camera_files_count(camera, yesterday_str)
+            # 获取目标日期的文件数
+            target_files = self.get_camera_files_count(camera, target_date_str)
             
-            # 如果昨天没有文件，查找最近一次有文件的日期
-            if yesterday_files == 0:
-                last_date, last_files = self.find_last_files_date(camera, yesterday - timedelta(days=1))
+            # 如果目标日期没有文件，检查下一天是否有文件
+            if target_files == 0:
+                next_day_files = self.get_camera_files_count(camera, next_date_str)
+                
+                # 如果下一天已经有文件了，说明问题已修复，跳过通知
+                if next_day_files > 0:
+                    print(f"{camera} 已恢复正常，{next_date_str}文件数：{next_day_files}")
+                    continue
+                
+                # 如果下一天也没有文件，查找最近一次有文件的日期并发送通知
+                last_date, last_files = self.find_last_files_date(camera, target_date - timedelta(days=1))
                 last_date_str = last_date.strftime('%Y%m%d') if last_date else "未找到"
-                self._send_notification(yesterday_str, yesterday_files, [camera], last_date_str, last_files)
+                self._send_notification(target_date_str, target_files, [camera], last_date_str, last_files)
 
     def _send_notification(self, date, total_files, missing_cameras, last_date_str, last_files):
         url = self.notify_config['url']
@@ -100,5 +121,10 @@ class SurveillanceChecker:
             print(f"通知发送失败: {str(e)}， 通知内容：{content}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='检查监控文件同步状态')
+    parser.add_argument('-d', '--date', type=str, 
+                       help='指定检查日期，格式为YYYYMMDD，例如：20240301。不指定则检查昨天的文件。')
+    
+    args = parser.parse_args()
     checker = SurveillanceChecker()
-    checker.check_yesterday_files() 
+    checker.check_files(args.date) 
