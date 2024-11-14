@@ -1,0 +1,63 @@
+name: Deploy KidWatch
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:  # 支持手动触发
+
+env:
+  PYTHON_VERSION: "3.11"  # 在顶层定义Python版本
+
+jobs:
+  # 获取部署配置
+  get-deploy-config:
+    uses: hujia7812556/reusable-workflows/.github/workflows/deploy.yml@main
+    with:
+      environment: prod
+
+  deploy:
+    needs: get-deploy-config
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ needs.get-deploy-config.outputs.deploy_host }}
+      DEPLOY_USER: ${{ needs.get-deploy-config.outputs.deploy_user }}
+      DEPLOY_KEY: ${{ needs.get-deploy-config.outputs.deploy_key }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Create config file
+        run: |
+          mkdir -p kidwatch/config
+          echo "${{ secrets.CONFIG_YAML }}" > kidwatch/config/config.yaml
+
+      - name: Deploy files
+        uses: burnett01/rsync-deployments@5.2.1
+        with:
+          switches: -avz --exclude='*.pyc' --exclude='__pycache__' --exclude='.git' --exclude='.DS_Store' --exclude='.gitkeep'
+          path: kidwatch/,requirements.txt,data/
+          remote_path: ${{ secrets.DEPLOY_TARGET }}
+          remote_host: ${{ env.DEPLOY_HOST }}
+          remote_user: ${{ env.DEPLOY_USER }}
+          remote_key: ${{ env.DEPLOY_KEY }}
+
+      - name: Setup and install dependencies
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ env.DEPLOY_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_TARGET }}
+            
+            # 检查并创建conda环境
+            if ! conda env list | grep -q "kidwatch"; then
+              conda create -n kidwatch python=${{ env.PYTHON_VERSION }} -y
+            fi
+            
+            # 激活环境并安装依赖
+            eval "$(conda shell.bash hook)"
+            conda activate kidwatch
+            pip install -r requirements.txt
