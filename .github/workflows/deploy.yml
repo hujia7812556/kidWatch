@@ -10,19 +10,8 @@ env:
   PYTHON_VERSION: "3.11"  # 在顶层定义Python版本
 
 jobs:
-  # 获取部署配置
-  get-deploy-config:
-    uses: hujia7812556/reusable-workflow/.github/workflows/deploy.yml@main
-    with:
-      environment: prod
-
   deploy:
-    needs: get-deploy-config
     runs-on: ubuntu-latest
-    env:
-      DEPLOY_HOST: ${{ needs.get-deploy-config.outputs.deploy_host }}
-      DEPLOY_USER: ${{ needs.get-deploy-config.outputs.deploy_user }}
-      DEPLOY_KEY: ${{ needs.get-deploy-config.outputs.deploy_key }}
 
     steps:
       - name: Check out code
@@ -32,7 +21,6 @@ jobs:
         run: |
           mkdir -p kidwatch/config
           echo "${{ secrets.CONFIG_YAML }}" > kidwatch/config/config.yaml
-          echo "${{ env.DEPLOY_USER }}"
 
       - name: Deploy files
         uses: burnett01/rsync-deployments@5.2.1
@@ -40,16 +28,16 @@ jobs:
           switches: -avz --exclude='*.pyc' --exclude='__pycache__' --exclude='.git' --exclude='.DS_Store' --exclude='.gitkeep'
           path: kidwatch/,requirements.txt,data/
           remote_path: ${{ secrets.DEPLOY_TARGET }}
-          remote_host: ${{ env.DEPLOY_HOST }}
-          remote_user: ${{ env.DEPLOY_USER }}
-          remote_key: ${{ env.DEPLOY_KEY }}
+          remote_host: ${{ secrets.DEPLOY_HOST }}
+          remote_user: ${{ secrets.DEPLOY_USER }}
+          remote_key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Setup and install dependencies
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ env.DEPLOY_HOST }}
-          username: ${{ env.DEPLOY_USER }}
-          key: ${{ env.DEPLOY_KEY }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_TARGET }}
             
