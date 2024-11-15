@@ -15,8 +15,6 @@ jobs:
     uses: hujia7812556/reusable-workflow/.github/workflows/deploy.yml@main
     with:
       environment: prod
-    outputs:
-      deploy_user: ${{ jobs.deploy-config.outputs.deploy_user }}
 
   deploy:
     needs: get-deploy-config
