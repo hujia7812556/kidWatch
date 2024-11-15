@@ -12,7 +12,7 @@ class CheckerSurveillance(BaseHandler):
         """获取指定摄像头在指定日期的文件数量"""
         am_path = f"{camera}/{date_str}AM"
         pm_path = f"{camera}/{date_str}PM"
-        print(f"Checking {am_path} and {pm_path}")
+        # print(f"Checking {am_path} and {pm_path}")
         
         am_exists = self.file_handler.path_exists(am_path)
         pm_exists = self.file_handler.path_exists(pm_path)
@@ -26,14 +26,14 @@ class CheckerSurveillance(BaseHandler):
                 am_files = len(self.file_handler.list_video_files(am_path))
                 total_files += am_files
             except FileNotFoundError:
-                print(f"Error accessing AM directory: {am_path}")
+                self.log_print(f"Error accessing AM directory: {am_path}")
         
         if pm_exists:
             try:
                 pm_files = len(self.file_handler.list_video_files(pm_path))
                 total_files += pm_files
             except FileNotFoundError:
-                print(f"Error accessing PM directory: {pm_path}")
+                self.log_print(f"Error accessing PM directory: {pm_path}")
         
         return total_files
 
@@ -51,15 +51,13 @@ class CheckerSurveillance(BaseHandler):
     def check_files(self, check_date=None):
         """检查指定日期或昨天的文件"""
         if check_date:
-            # 如果指定了日期，解析日期字符串
             try:
                 target_date = datetime.strptime(check_date, '%Y%m%d')
                 next_date = target_date + timedelta(days=1)
             except ValueError:
-                print(f"日期格式错误，应为YYYYMMDD，例如：20240301")
+                self.log_print(f"日期格式错误，应为YYYYMMDD，例如：20240301")
                 return
         else:
-            # 没有指定日期，使用昨天的日期
             next_date = datetime.now()
             target_date = next_date - timedelta(days=1)
 
@@ -73,19 +71,24 @@ class CheckerSurveillance(BaseHandler):
             # 获取目标日期的文件数
             target_files = self.get_camera_files_count(camera, target_date_str)
             
-            # 如果目标日期没有文件，检查下一天是否有文件
-            if target_files == 0:
-                next_day_files = self.get_camera_files_count(camera, next_date_str)
+            # 如果目标日期有文件，继续检查下一个摄像头
+            if target_files > 0:
+                self.log_print(f"摄像头：{camera} 同步nas正常，{target_date_str}文件数：{target_files}")
+                continue
                 
-                # 如果下一天已经有文件了，说明问题已修复，跳过通知
-                if next_day_files > 0:
-                    print(f"{camera} 已恢复正常，{next_date_str}文件数：{next_day_files}")
-                    continue
-                
-                # 如果下一天也没有文件，查找最近一次有文件的日期并发送通知
-                last_date, last_files = self.find_last_files_date(camera, target_date - timedelta(days=1))
-                last_date_str = last_date.strftime('%Y%m%d') if last_date else "未找到"
-                self._send_notification(target_date_str, target_files, [camera], last_date_str, last_files)
+            # 检查下一天的文件数
+            next_day_files = self.get_camera_files_count(camera, next_date_str)
+            
+            # 如果下一天已经有文件了，说明问题已修复，继续检查下一个摄像头
+            if next_day_files > 0:
+                self.log_print(f"摄像头：{camera} 同步nas已恢复正常，{next_date_str}文件数：{next_day_files}")
+                continue
+            
+            self.log_print(f"摄像头：{camera} 同步nas中断，{target_date_str}文件数：{target_files}")
+            # 如果目标日期和下一天都没有文件，查找最近一次有文件的日期并发送通知
+            last_date, last_files = self.find_last_files_date(camera, target_date - timedelta(days=1))
+            last_date_str = last_date.strftime('%Y%m%d') if last_date else "未找到"
+            self._send_notification(target_date_str, target_files, [camera], last_date_str, last_files)
 
     def _send_notification(self, date, total_files, missing_cameras, last_date_str, last_files):
         url = self.notify_config['url']
@@ -114,9 +117,9 @@ class CheckerSurveillance(BaseHandler):
         try:
             response = requests.post(url, headers=headers, json=data)
             response.raise_for_status()
-            print(f"通知发送成功: {response.status_code}， 通知内容：{content}")
+            self.log_print(f"通知发送成功: {response.status_code}， 通知内容：{content}")
         except requests.exceptions.RequestException as e:
-            print(f"通知发送失败: {str(e)}， 通知内容：{content}")
+            self.log_print(f"通知发送失败: {str(e)}， 通知内容：{content}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='检查监控文件同步状态')
