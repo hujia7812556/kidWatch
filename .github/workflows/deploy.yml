@@ -41,12 +41,15 @@ jobs:
           script: |
             cd ${{ secrets.DEPLOY_TARGET }}
             
+            # 设置conda的完整路径
+            CONDA_PATH="/home/ecs-user/miniconda3/condabin/conda"
+            
             # 检查并创建conda环境
-            if ! conda env list | grep -q "kidwatch"; then
-              conda create -n kidwatch python=${{ env.PYTHON_VERSION }} -y
+            if ! $CONDA_PATH env list | grep -q "kidwatch"; then
+              $CONDA_PATH create -n kidwatch python=${{ env.PYTHON_VERSION }} -y
             fi
             
             # 激活环境并安装依赖
-            eval "$(conda shell.bash hook)"
+            eval "$($CONDA_PATH shell.bash hook)"
             conda activate kidwatch
             pip install -r requirements.txt
