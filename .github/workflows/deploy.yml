@@ -23,15 +23,14 @@ jobs:
           echo "${{ secrets.CONFIG_YAML }}" > kidwatch/config/config.yaml
 
       - name: Deploy files
-        uses: burnett01/rsync-deployments@5.2.1
+        uses: appleboy/scp-action@v0.1.4
         with:
-          switches: -avz --exclude='*.pyc' --exclude='__pycache__' --exclude='.git' --exclude='.DS_Store' --exclude='.gitkeep'
-          path: kidwatch/,requirements.txt,data/
-          remote_path: ${{ secrets.DEPLOY_TARGET }}
-          remote_host: ${{ secrets.DEPLOY_HOST }}
-          remote_user: ${{ secrets.DEPLOY_USER }}
-          remote_key: ${{ secrets.DEPLOY_KEY }}
-          remote_host_key_check: false  # 禁用 StrictHostKeyChecking
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          source: "kidwatch,requirements.txt"
+          target: "${{ secrets.DEPLOY_TARGET }}"
+          strip_components: 0
 
       - name: Setup and install dependencies
         uses: appleboy/ssh-action@v1.0.0
