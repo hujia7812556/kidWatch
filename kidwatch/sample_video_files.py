@@ -23,9 +23,7 @@ class SampleVideoFiles(BaseHandler):
     # 采样
     def sample_video_files(self, outfile):
         """
-        按摄像头分别采样视频文件
-        客厅和餐桌：各采样300个视频（场景相似，数量较多）
-        卧室：采样200个视频（场景特殊，数量较少）
+        按摄像头分别采样视频文件，采样数量从配置文件读取
         """
         # 获取所有视频文件
         all_files = self.file_handler.list_video_files(path='')
@@ -37,27 +35,23 @@ class SampleVideoFiles(BaseHandler):
             if camera_type != 'default':
                 camera_files[camera_type].append(file_path)
         
-        # 设置每个摄像头的采样数量
-        sample_sizes = {
-            'living_room': 300,  # 客厅采样300个
-            'dining_room': 300,  # 餐桌采样300个
-            'bedroom': 200       # 卧室采样200个
-        }
-        
         # 采样并记录结果
         sampled_files = []
         random.seed(20240819)  # 固定随机种子以确保可重复性
         
         for camera_type, files in camera_files.items():
-            sample_size = sample_sizes.get(camera_type, 0)
+            config = self.camera_configs[camera_type]
+            sample_size = config.get('sample_size', 0)
+            
             if sample_size > 0:
                 # 确保采样数量不超过实际文件数量
                 actual_sample_size = min(sample_size, len(files))
                 camera_samples = random.sample(files, actual_sample_size)
                 sampled_files.extend(camera_samples)
                 
-                camera_name = self.camera_configs[camera_type]['name']
-                self.log_print(f"{camera_name}摄像头: 总计 {len(files)} 个视频，采样 {actual_sample_size} 个")
+                camera_name = config['name']
+                self.log_print(f"{camera_name}摄像头: 总计 {len(files)} 个视频，"
+                             f"计划采样 {sample_size} 个，实际采样 {actual_sample_size} 个")
         
         # 将采样结果写入CSV文件
         project_path = self.config_reader.get_root_path()
