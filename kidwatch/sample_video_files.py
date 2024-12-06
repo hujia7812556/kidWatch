@@ -1,38 +1,83 @@
 import argparse
 import csv
 import random
+from collections import defaultdict
 from .utils.base_handler import BaseHandler
+from .utils.config_reader import ConfigReader
 
 
 class SampleVideoFiles(BaseHandler):
     def __init__(self):
         super().__init__()
+        self.camera_configs = self.config_reader.get_config('cameras')
+
+    def get_camera_type(self, video_path):
+        """根据视频路径判断摄像头类型"""
+        for camera_type, config in self.camera_configs.items():
+            if camera_type != 'default':
+                folder = config['folder']
+                if folder and folder in video_path:
+                    return camera_type
+        return 'default'
 
     # 采样
     def sample_video_files(self, outfile):
-        files = self.file_handler.list_video_files(path='')
-
-        random.seed(20240819)
-        sampled_files = random.sample(files, 1000)
-        project_path = ConfigReader.get_root_path()
+        """
+        按摄像头分别采样视频文件
+        客厅和餐桌：各采样300个视频（场景相似，数量较多）
+        卧室：采样200个视频（场景特殊，数量较少）
+        """
+        # 获取所有视频文件
+        all_files = self.file_handler.list_video_files(path='')
+        
+        # 按摄像头分类视频
+        camera_files = defaultdict(list)
+        for file_path in all_files:
+            camera_type = self.get_camera_type(file_path)
+            if camera_type != 'default':
+                camera_files[camera_type].append(file_path)
+        
+        # 设置每个摄像头的采样数量
+        sample_sizes = {
+            'living_room': 300,  # 客厅采样300个
+            'dining_room': 300,  # 餐桌采样300个
+            'bedroom': 200       # 卧室采样200个
+        }
+        
+        # 采样并记录结果
+        sampled_files = []
+        random.seed(20240819)  # 固定随机种子以确保可重复性
+        
+        for camera_type, files in camera_files.items():
+            sample_size = sample_sizes.get(camera_type, 0)
+            if sample_size > 0:
+                # 确保采样数量不超过实际文件数量
+                actual_sample_size = min(sample_size, len(files))
+                camera_samples = random.sample(files, actual_sample_size)
+                sampled_files.extend(camera_samples)
+                
+                camera_name = self.camera_configs[camera_type]['name']
+                self.log_print(f"{camera_name}摄像头: 总计 {len(files)} 个视频，采样 {actual_sample_size} 个")
+        
+        # 将采样结果写入CSV文件
+        project_path = self.config_reader.get_root_path()
         filename = f'{project_path}/data/intermediate/{outfile}'
-        # 打开文件并写入数据
-        with open(filename, mode='w', newline="", encoding='utf-8') as file:
+        
+        with open(filename, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
-            for row in sampled_files:
-                # 写入数组中的每一行
-                writer.writerow([row])
+            for file_path in sampled_files:
+                writer.writerow([file_path])
+        
+        self.log_print(f"\n总计采样 {len(sampled_files)} 个视频，结果保存至 {filename}")
 
 
 if __name__ == "__main__":
     file_op = SampleVideoFiles()
-    parser = argparse.ArgumentParser(description='根据输入参数执行不同的方法')
+    parser = argparse.ArgumentParser(description='采样视频文件用于训练和评估')
 
-    # 添加参数
     parser.add_argument('-o', '--outfile', type=str,
                         default='sample_video_files.csv',
-                        help="输出文件相对路径，文件保存在data目录下")
+                        help="输出文件相对路径，文件保存在data/intermediate目录下")
 
-    # 解析参数
     args = parser.parse_args()
     file_op.sample_video_files(args.outfile)

@@ -16,4 +16,29 @@ notify:
   url:
   api_token:
   user_id:
+cameras:
+  bedroom:
+    name: 卧室
+    folder: 卧室的摄像头
+    conf_threshold: 0.4  # 卧室光线不足，降低置信度要求
+    height_ratio: 0.8    # 卧室拍摄距离近，允许更大的身高比
+    sample_interval: 15   # 更密集的采样以提高检测率
+  living_room:
+    name: 客厅
+    folder: 客厅的摄像头
+    conf_threshold: 0.6
+    height_ratio: 0.7
+    sample_interval: 30
+  dining_room:
+    name: 餐桌
+    folder: 餐桌的摄像头
+    conf_threshold: 0.6
+    height_ratio: 0.7
+    sample_interval: 30
+  default:  # 默认配置，当无法识别摄像头类型时使用
+    name: 未知
+    folder: ""
+    conf_threshold: 0.6
+    height_ratio: 0.7
+    sample_interval: 30
 
