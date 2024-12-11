@@ -40,6 +40,8 @@ class GenerateSampleList(BaseHandler):
         
         with open(filename, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
+            # 添加header
+            writer.writerow(['video_path'])
             for file_path in sampled_files:
                 writer.writerow([file_path])
         
