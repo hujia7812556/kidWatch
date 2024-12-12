@@ -108,6 +108,10 @@ class SmbFileHandler(FileHandler, ABC):
         except Exception as e:
             print(f"列出视频文件失败 {path}: {str(e)}")
             return []
+        
+    def get_safe_connections_limit(self):
+        """获取安全的并发限制数"""
+        return self.connection_pool.get_safe_connections_limit()
 
     def _process_single_file(self, remote_path, local_path):
         """处理单个文件的下载"""

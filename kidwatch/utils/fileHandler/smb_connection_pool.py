@@ -49,4 +49,14 @@ class SMBConnectionPool:
     def return_connection(self, conn):
         """归还连接到连接池"""
         with self.lock:
-            self.connection_queue.put(conn) 
+            self.connection_queue.put(conn)
+    
+    def get_available_connections(self):
+        """获取当前可用的连接数"""
+        return self.connection_queue.qsize()
+    
+    def get_safe_connections_limit(self):
+        """获取安全的并发限制数
+        返回当前可用连接数-1，确保至少保留一个连接用于其他操作"""
+        # return max(1, min(self.get_available_connections(), int(self.max_connections * 0.6)))  # 至少返回1，避免并发数为0
+        return max(1, min(self.get_available_connections(), self.max_connections - 1))
