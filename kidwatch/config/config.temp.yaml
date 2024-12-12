@@ -6,12 +6,16 @@ smb_internal:
   shared_folder:
   username:
   password:
+  max_sessions: 10  # SMB会话池大小
+  max_workers:  4   # 进程池大小
 smb:
   host:
   port:
   shared_folder:
   username:
   password:
+  max_sessions: 10  # SMB会话池大小
+  max_workers:  4   # 进程池大小
 notify:
   url:
   api_token:
