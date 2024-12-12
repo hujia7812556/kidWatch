@@ -13,10 +13,6 @@ from queue import Queue
 class ExtractVideoFrames(BaseHandler):
     def __init__(self):
         super().__init__()
-        # 使用连接池的安全并发数来初始化信号量
-        self.connection_limit = self.file_handler.get_safe_connections_limit()
-        # 添加信号量来控制并发访问
-        self.smb_semaphore = threading.Semaphore(self.connection_limit)  # 根据连接池限制设置信号量
 
     def clear_frames_directory(self, directory):
         """清空frames目录"""
@@ -32,7 +28,7 @@ class ExtractVideoFrames(BaseHandler):
             os.makedirs(directory)
 
     def capture_frames(self, video_path, output_dir):
-        print(f"开始处理视频: {video_path}")
+        # print(f"开始处理视频: {video_path}")
         """从视频中按配置的间隔截取帧"""
         camera_type = self.get_camera_type(video_path)
         sample_interval = self.camera_configs[camera_type]['sample_interval']
@@ -62,6 +58,7 @@ class ExtractVideoFrames(BaseHandler):
                 if frame_count % sample_interval == 0:
                     # 构造输出文件名，保存到视频专属文件夹中
                     frame_file = f"{video_frame_dir}/frame_{frame_count}.jpg"
+                    print(f"frame_file: {frame_file}")
                     cv2.imwrite(frame_file, frame)
                     saved_count += 1
                 
@@ -72,8 +69,8 @@ class ExtractVideoFrames(BaseHandler):
 
     def capture_frames_with_semaphore(self, video_path, output_dir):
         """使用信号量保护的帧捕获方法"""
-        with self.smb_semaphore:
-            return self.capture_frames(video_path, output_dir)
+        # with self.smb_semaphore:
+        return self.capture_frames(video_path, output_dir)
 
     def list_video_files_from_file(self, video_list_path):
         """从文件中读取视频文件列表
@@ -139,17 +136,21 @@ class ExtractVideoFrames(BaseHandler):
         # 清空输出目录
         self.clear_frames_directory(output_dir)
         
+        # 使用连接池的安全并发数来初始化信号量
+        connection_limit = self.file_handler.get_safe_connections_limit()
+        self.log_print(f"信号量并发数: {connection_limit}")
+        # 添加信号量来控制并发访问
+        self.smb_semaphore = threading.Semaphore(connection_limit)  # 根据连接池限制设置信号量
 
         # 动态计算最优线程数
         cpu_count = os.cpu_count() or 4
         # 使用min确保不会创建过多线程
         max_workers = min(
-            self.connection_limit // 2,  # SMB连接池限制
+            int(connection_limit * 0.6),  # SMB连接池限制
             cpu_count * 2,    # CPU核心数的2倍
             len(remote_file_paths),  # 不超过文件数
             10  # 硬上限
         )
-        self.log_print(f"信号量并发数: {self.connection_limit}")
         self.log_print(f"使用线程数: {max_workers}")
         # exit()
         

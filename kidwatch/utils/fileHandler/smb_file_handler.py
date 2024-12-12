@@ -1,10 +1,9 @@
 import itertools
 from abc import ABC
-
 import smbclient
 from smbprotocol.exceptions import SMBException
 from concurrent.futures import ProcessPoolExecutor
-from .smb_connection_pool import SMBConnectionPool
+from ..smb.smb_session_pool import SMBSessionPool
 
 from .file_handler import FileHandler
 from ..config_reader import ConfigReader
@@ -32,74 +31,98 @@ class SmbFileHandler(FileHandler, ABC):
         self._shared_folder = self.config.get('shared_folder')
         self._username = self.config.get('username')
         self._password = self.config.get('password')
-        self.connection_pool = SMBConnectionPool(
+        self.session_pool = SMBSessionPool(
             host=self.config.get('host'),
             username=self.config.get('username'),
             password=self.config.get('password'),
             port=self.config.get('port'),
-            max_connections=self.config.get('max_connections', 10)
+            max_sessions=self.config.get('max_sessions', 10)
         )
+
+    def _get_full_path(self, path):
+        """构建完整的SMB路径"""
+        return f"{self._host}/{self._shared_folder}/{path}"
 
     def list_video_files(self, path=''):
         """列出目录及子目录下的所有video文件"""
-        connection = self.connection_pool.get_connection()
+        session = None
         try:
-            return self._list_video_files(path, connection)
+            session = self.session_pool.get_session()
+            return self._list_video_files(path)
+        except Exception as e:
+            print(f"列出视频文件失败: {str(e)}")
+            if session:
+                self.session_pool.unregister_session(session)
+            raise
         finally:
-            self.connection_pool.return_connection(connection)
+            if session:
+                self.session_pool.return_session(session)
 
     def list_files(self, path='', excludes=[]):
         """列出目录下的所有文件，不包括子目录"""
-        conn_time = self.connection_pool.get_connection()
+        session = None
         try:
-            files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
+            session = self.session_pool.get_session()
+            files = smbclient.scandir(self._get_full_path(path), port=self._port)
             file_list = []
             for file in files:
                 if file.name in excludes:
                     continue
                 file_list.append(file.name)
             return file_list
+        except Exception as e:
+            print(f"列出文件失败: {str(e)}")
+            if session:
+                self.session_pool.unregister_session(session)
+            raise
         finally:
-            self.connection_pool.return_connection(conn_time)
+            if session:
+                self.session_pool.return_session(session)
 
     def read(self, path, mode='rb'):
         """读取文件内容"""
-        connection = self.connection_pool.get_connection()
+        session = None
         try:
-            with smbclient.open_file(f"{self._host}/{self._shared_folder}/{path}", 
-                                    mode=mode, port=self._port) as file:
+            session = self.session_pool.get_session()
+            with smbclient.open_file(self._get_full_path(path), mode=mode, port=self._port) as file:
                 return file.read()
+        except Exception as e:
+            print(f"读取文件失败: {str(e)}")
+            if session:
+                self.session_pool.unregister_session(session)
+            raise
         finally:
-            self.connection_pool.return_connection(connection)
+            if session:
+                self.session_pool.return_session(session)
 
     def path_exists(self, path):
         """检查路径是否存在"""
-        connection = self.connection_pool.get_connection()
+        session = None
         try:
-            try:
-                smbclient.stat(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
-                return True
-            except:
-                return False
+            session = self.session_pool.get_session()
+            smbclient.stat(self._get_full_path(path), port=self._port)
+            return True
+        except Exception as e:
+            print(f"检查路径存在失败: {str(e)}")
+            return False
         finally:
-            self.connection_pool.return_connection(connection)
+            if session:
+                self.session_pool.return_session(session)
 
-    def _list_video_files(self, path, connection):
+    def _list_video_files(self, path):
         """内部方法：递归列出视频文件
         
         Args:
             path: 要遍历的路径
-            connection: 从连接池获取的连接
         """
         try:
-            files = smbclient.scandir(f"{self._host}/{self._shared_folder}/{path}", port=self._port)
+            files = smbclient.scandir(self._get_full_path(path), port=self._port)
             file_list = []
             for file in files:
                 if file.name.startswith('.') or file.name.startswith('@'):
                     continue
                 if file.is_dir():
-                    # 递归调用时传递同一个连接
-                    sub_file_list = self._list_video_files(f"{path}/{file.name}", connection)
+                    sub_file_list = self._list_video_files(f"{path}/{file.name}")
                     file_list = list(itertools.chain(file_list, sub_file_list))
                 else:
                     if file.name.endswith('.mp4'):
@@ -111,29 +134,4 @@ class SmbFileHandler(FileHandler, ABC):
         
     def get_safe_connections_limit(self):
         """获取安全的并发限制数"""
-        return self.connection_pool.get_safe_connections_limit()
-
-    def _process_single_file(self, remote_path, local_path):
-        """处理单个文件的下载"""
-        connection = self.connection_pool.get_connection()
-        try:
-            with smbclient.open_file(remote_path, mode='rb') as remote_file:
-                with open(local_path, 'wb') as local_file:
-                    local_file.write(remote_file.read())
-            return True
-        except Exception as e:
-            print(f"下载文件失败 {remote_path}: {str(e)}")
-            return False
-        finally:
-            self.connection_pool.return_connection(connection)
-
-    def download_files(self, file_list):
-        """并行下载多个文件"""
-        with ProcessPoolExecutor(max_workers=self.config.get('max_workers', 4)) as executor:
-            futures = []
-            for remote_path, local_path in file_list:
-                future = executor.submit(self._process_single_file, remote_path, local_path)
-                futures.append(future)
-            
-            results = [future.result() for future in futures]
-        return all(results)
+        return self.session_pool.get_safe_sessions_limit()
