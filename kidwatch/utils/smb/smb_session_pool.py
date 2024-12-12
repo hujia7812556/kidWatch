@@ -78,4 +78,4 @@ class SMBSessionPool:
     
     def get_safe_sessions_limit(self) -> int:
         """获取安全的并发限制数"""
-        return max(1, min(self.get_available_sessions(), self.max_sessions - 1)) 
+        return max(1, self.max_sessions - 1) 
