@@ -116,7 +116,7 @@ class ExtractVideoFrames(BaseHandler):
             try:
                 frames_count = self.capture_frames(remote_file_path, output_dir)
                 total_frames += frames_count
-                self.log_print(f"从 {remote_file_path} 提取了 {frames_count} 帧")
+                # self.log_print(f"从 {remote_file_path} 提取了 {frames_count} 帧")
             except Exception as e:
                 self.log_print(f"处理 {remote_file_path} 时出错: {str(e)}")
         
