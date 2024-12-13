@@ -13,19 +13,16 @@ class SMBSessionPool:
         
         self.session_queue = Queue()
         self.lock = Lock()
+        self.created_sessions = 0  # 跟踪已创建的会话数量
         
-        # 初始化所有会话
-        self._initialize_sessions()
-    
-    def _initialize_sessions(self):
-        """初始化所有会话"""
-        for _ in range(self.max_sessions):
-            try:
-                session = SMBSession(self.host, self.username, self.password, self.port)
-                self.session_queue.put(session)
-            except Exception as e:
-                print(f"初始化SMB会话失败: {str(e)}")
-                raise
+        # 初始化一个默认会话
+        try:
+            default_session = SMBSession(self.host, self.username, self.password, self.port)
+            self.session_queue.put(default_session)
+            self.created_sessions = 1
+        except Exception as e:
+            print(f"初始化默认SMB会话失败: {str(e)}")
+            raise
     
     def _create_new_session(self) -> SMBSession:
         """创建新的SMB会话"""
@@ -36,15 +33,29 @@ class SMBSessionPool:
             raise
 
     def get_session(self) -> SMBSession:
-        """从会话池获取一个会话"""
+        """从会话池获取一个会话，如果需要则创建新会话"""
         with self.lock:
-            session = self.session_queue.get()
-            # 检查会话是否有效，如果无效则创建新会话
-            try:
-                if not session.is_connected():
+            if not self.session_queue.empty():
+                session = self.session_queue.get()
+                # 检查会话是否有效，如果无效则创建新会话
+                try:
+                    if not session.is_connected():
+                        session = self._create_new_session()
+                except:
                     session = self._create_new_session()
-            except:
-                session = self._create_new_session()
+            else:
+                # 如果没有可用会话且未达到最大限制，创建新会话
+                if self.created_sessions < self.max_sessions:
+                    session = self._create_new_session()
+                    self.created_sessions += 1
+                else:
+                    # 等待一个会话变得可用
+                    session = self.session_queue.get()
+                    try:
+                        if not session.is_connected():
+                            session = self._create_new_session()
+                    except:
+                        session = self._create_new_session()
             
             return session
     
