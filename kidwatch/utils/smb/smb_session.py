@@ -12,27 +12,29 @@ class SMBSession:
         self.register()
     
     def register(self):
-        register_session(self.host, username=self.username, password=self.password, port=self.port)
+        """注册新会话前先删除旧会话"""
+        try:
+            delete_session(self.host)
+        except Exception:
+            pass
+        register_session(self.host, username=self.username, 
+                        password=self.password, port=self.port)
+    
+    def close(self):
+        """关闭会话"""
+        try:
+            delete_session(self.host)
+        except Exception:
+            pass
     
     def is_connected(self) -> bool:
-        """
-        检查 SMB 会话是否仍然有效
-        
-        使用以下策略检查连接状态：
-        1. 检查距离上次验证的时间间隔
-        2. 如果间隔小于阈值（如60秒），假定连接仍然有效
-        3. 如果间隔超过阈值，才进行实际的连接测试
-        
-        Returns:
-            bool: 如果会话有效返回 True，否则返回 False
-        """
+        """检查 SMB 会话是否仍然有效"""
         current_time = time.time()
-        # 如果距离上次检查时间不超过60秒，假定连接仍然有效
         if current_time - self.last_check_time < 60:
             return True
             
         try:
-            # 只在超过时间阈值时才进行实际的连接测试
+            # 重新注册会话
             self.register()
             self.last_check_time = current_time
             return True

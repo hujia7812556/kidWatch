@@ -7,12 +7,15 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .utils.base_handler import BaseHandler
 import pandas as pd
-from queue import Queue
+from queue import Queue, Empty
+from threading import Semaphore, Lock
 
 
 class ExtractVideoFrames(BaseHandler):
     def __init__(self):
         super().__init__()
+        # 创建信号量，限制并发数为session池的安全限制数
+        self.smb_semaphore = Semaphore(self.file_handler.get_safe_connections_limit())
 
     def clear_frames_directory(self, directory):
         """清空frames目录"""
@@ -28,7 +31,6 @@ class ExtractVideoFrames(BaseHandler):
             os.makedirs(directory)
 
     def capture_frames(self, video_path, output_dir):
-        # print(f"开始处理视频: {video_path}")
         """从视频中按配置的间隔截取帧"""
         camera_type = self.get_camera_type(video_path)
         sample_interval = self.camera_configs[camera_type]['sample_interval']
@@ -58,7 +60,6 @@ class ExtractVideoFrames(BaseHandler):
                 if frame_count % sample_interval == 0:
                     # 构造输出文件名，保存到视频专属文件夹中
                     frame_file = f"{video_frame_dir}/frame_{frame_count}.jpg"
-                    print(f"frame_file: {frame_file}")
                     cv2.imwrite(frame_file, frame)
                     saved_count += 1
                 
@@ -69,8 +70,8 @@ class ExtractVideoFrames(BaseHandler):
 
     def capture_frames_with_semaphore(self, video_path, output_dir):
         """使用信号量保护的帧捕获方法"""
-        # with self.smb_semaphore:
-        return self.capture_frames(video_path, output_dir)
+        with self.smb_semaphore:
+            return self.capture_frames(video_path, output_dir)
 
     def list_video_files_from_file(self, video_list_path):
         """从文件中读取视频文件列表
@@ -122,7 +123,14 @@ class ExtractVideoFrames(BaseHandler):
         self.log_print(f"总共提取了 {total_frames} 帧")
 
     def concurrent_download_video_frames(self, camera=None, date=None, video_list_path=None):
-        """并发下载视频帧"""
+        """并发下载视频帧
+        
+        Args:
+            camera: 摄像头配置key
+            date: 日期字符串
+            video_list_path: 视频列表文件路径
+        """
+        # 获取视频文件列表
         if video_list_path:
             remote_file_paths = self.list_video_files_from_file(video_list_path)
             if not remote_file_paths:
@@ -135,84 +143,90 @@ class ExtractVideoFrames(BaseHandler):
         
         # 清空输出目录
         self.clear_frames_directory(output_dir)
-        
-        # 使用连接池的安全并发数来初始化信号量
-        connection_limit = self.file_handler.get_safe_connections_limit()
-        self.log_print(f"信号量并发数: {connection_limit}")
-        # 添加信号量来控制并发访问
-        self.smb_semaphore = threading.Semaphore(connection_limit)  # 根据连接池限制设置信号量
 
-        # 动态计算最优线程数
+        # 获取并发参数
+        connection_limit = self.file_handler.get_safe_connections_limit()
         cpu_count = os.cpu_count() or 4
-        # 使用min确保不会创建过多线程
         max_workers = min(
-            int(connection_limit * 0.6),  # SMB连接池限制
+            connection_limit // 2,  # 使用SMB连接池的安全限制数
             cpu_count * 2,    # CPU核心数的2倍
             len(remote_file_paths),  # 不超过文件数
             10  # 硬上限
         )
-        self.log_print(f"使用线程数: {max_workers}")
-        # exit()
+        self.log_print(f"使用线程数: {max_workers}, SMB连接限制: {connection_limit}")
+
+        # 初始化任务队列和结果统计
+        task_queue = Queue()
+        for file_path in remote_file_paths:
+            task_queue.put(file_path)
         
-        # 使用队列来控制内存使用
-        video_queue = Queue(maxsize=max_workers * 2)
-        result_queue = Queue()
-        
-        def worker():
-            while True:
-                try:
-                    video_path = video_queue.get()
-                    if video_path is None:  # 退出信号
-                        break
-                    frames_count = self.capture_frames_with_semaphore(video_path, output_dir)
-                    result_queue.put((video_path, frames_count, None))  # 成功
-                except Exception as e:
-                    result_queue.put((video_path, 0, str(e)))  # 失败
-                finally:
-                    video_queue.task_done()
-        
-        # 启动工作线程
-        threads = []
-        for _ in range(max_workers):
-            t = threading.Thread(target=worker)
-            t.daemon = True
-            t.start()
-            threads.append(t)
-        
-        # 提交任务
-        for video_path in remote_file_paths:
-            video_queue.put(video_path)
-        
-        # 发送退出信号
-        for _ in range(max_workers):
-            video_queue.put(None)
-        
-        # 等待所有任务完成
-        total_frames = 0
-        failed_videos = []
         processed_count = 0
-        
-        while processed_count < len(remote_file_paths):
-            video_path, frames_count, error = result_queue.get()
-            processed_count += 1
+        total_count = len(remote_file_paths)
+        failed_videos = []
+        total_frames = 0
+        batch_size = 10  # 每次分配的文件数
+        results_lock = Lock()  # 用于保护结果统计的锁
+
+        def process_batch():
+            """处理一批文件"""
+            batch_results = {
+                'processed': 0,
+                'frames': 0,
+                'failed': []
+            }
+
+            while True:
+                # 获取一批任务
+                batch = []
+                for _ in range(batch_size):
+                    try:
+                        file_path = task_queue.get_nowait()
+                        batch.append(file_path)
+                    except Empty:
+                        break
+                
+                if not batch:  # 没有更多任务了
+                    break
+
+                # 处理这批文件
+                for video_path in batch:
+                    try:
+                        frames_count = self.capture_frames_with_semaphore(video_path, output_dir)
+                        batch_results['frames'] += frames_count
+                        batch_results['processed'] += 1
+                        # self.log_print(f"处理视频 {video_path}: 提取了 {frames_count} 帧")
+                    except Exception as e:
+                        batch_results['failed'].append((video_path, str(e)))
+                        self.log_print(f"处理视频 {video_path} 失败: {str(e)}")
+                    finally:
+                        task_queue.task_done()
+
+                # 更新总体进度
+                with results_lock:
+                    nonlocal processed_count, total_frames
+                    processed_count += batch_results['processed']
+                    total_frames += batch_results['frames']
+                    failed_videos.extend(batch_results['failed'])
+                    progress = (processed_count / total_count) * 100
+                    self.log_print(f"总体进度: {progress:.1f}% ({processed_count}/{total_count})")
+
+            return batch_results
+
+        # 使用线程池处理文件
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_batch) for _ in range(max_workers)]
             
-            if error:
-                failed_videos.append((video_path, error))
-                self.log_print(f"处理失败 ({processed_count}/{len(remote_file_paths)}): {video_path}")
-                self.log_print(f"错误信息: {error}")
-            else:
-                total_frames += frames_count
-                self.log_print(f"处理成功 ({processed_count}/{len(remote_file_paths)}): "
-                             f"{video_path} - {frames_count} 帧")
-        
-        # 等待所有线程结束
-        for t in threads:
-            t.join()
-        
-        # 输出统计信息
-        self.log_print(f"\n处理完成:")
-        self.log_print(f"总视频数: {len(remote_file_paths)}")
-        self.log_print(f"成功处理: {len(remote_file_paths) - len(failed_videos)}")
+            # 等待所有任务完成
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    self.log_print(f"处理批次时发生错误: {str(e)}")
+
+        # 输出最终统计信息
+        self.log_print("\n=== 处理完成 ===")
+        self.log_print(f"总视频数: {total_count}")
+        self.log_print(f"成功处理: {total_count - len(failed_videos)}")
         self.log_print(f"失败数量: {len(failed_videos)}")
         self.log_print(f"总提取帧数: {total_frames}")
         
@@ -220,6 +234,10 @@ class ExtractVideoFrames(BaseHandler):
             self.log_print("\n失败的视频:")
             for video_path, error in failed_videos:
                 self.log_print(f"{video_path}: {error}")
+
+        # 如果失败太多，抛出异常
+        if len(failed_videos) > total_count * 0.3:  # 失败率超过30%
+            raise RuntimeError(f"处理失败率过高: {len(failed_videos)}/{total_count}")
 
     def list_video_files(self, camera=None, date=None):
         """列出符合条件的视频文件
@@ -231,11 +249,11 @@ class ExtractVideoFrames(BaseHandler):
         if camera and camera not in self.camera_configs:
             raise ValueError(f'{camera} is not a valid camera type in config')
             
-        # 获取需要处理的摄像头文件夹路径列表
+        # 获取要处理的摄像头文件夹路径列表
         if camera:
             camera_folders = [self.camera_configs[camera]['folder']]
         else:
-            # 如果未指定camera，获取所有配置的摄像头文件夹（除了default）
+            # 如果未指定camera，获取所有置的摄像头文件夹（除了default）
             camera_folders = [config['folder'] for key, config in self.camera_configs.items() 
                             if key != 'default' and config.get('folder')]
         
