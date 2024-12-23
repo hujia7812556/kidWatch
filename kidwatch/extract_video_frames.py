@@ -289,12 +289,14 @@ if __name__ == "__main__":
                       help="日期，格式如：20240101，处理指定日期的视频文件，若不设置则不限日期")
     parser.add_argument('-c', '--concurrent', action='store_true',
                       help="是否使用并发处理")
+    parser.add_argument('-m', '--mode', type=str, choices=['normal', 'concurrent', 'async'], default='normal',
+                      help="处理模式：normal(普通模式)、concurrent(并发模式)，默认normal")
     parser.add_argument('-l', '--list', type=str, default=None,
                       help="视频列表文件路径（CSV格式，需包含video_path列），如果提供则优先使用列表文件中的视频")
     
     args = parser.parse_args()
     
-    if args.concurrent:
+    if args.mode == 'concurrent':
         download_video_file.concurrent_download_video_frames(args.camera, args.date, args.list)
     else:
         download_video_file.download_video_frames(args.camera, args.date, args.list)
