@@ -34,12 +34,15 @@ class ExtractVideoFrames(BaseHandler):
         """懒加载异步信号量"""
         if self._async_semaphore is None:
             # 使用异步模式的并发数限制
-            concurrent_max_workers = self.concurrent_config.get('max_workers', 2)
+            async_max_workers = self.async_config.get('max_workers', 2)
             max_workers = min(
-                concurrent_max_workers,
+                async_max_workers,
                 self.file_handler.get_safe_connections_limit() // 2,  # SMB连接池限制
             )
             self._async_semaphore = asyncio.Semaphore(max_workers)
+            self.log_print(f"使用协程数: {max_workers}, "
+                           f"SMB连接限制: {self.file_handler.get_safe_connections_limit()}, "
+                           f"批处理大小: {self.concurrent_config.get('batch_size', 10)}")
         return self._async_semaphore
 
     def clear_frames_directory(self, directory):
@@ -176,8 +179,6 @@ class ExtractVideoFrames(BaseHandler):
             self.file_handler.get_safe_connections_limit() // 2,  # SMB连接池限制
             len(remote_file_paths)  # 不超过文件数
         )
-        self.log_print(f"使用线程数: {max_workers}, SMB连接限制: {self.file_handler.get_safe_connections_limit()}, 批处理大小: {self.concurrent_config.get('batch_size', 10)}")
-
         # 初始化任务队列和结果统计
         task_queue = Queue()
         for file_path in remote_file_paths:
@@ -391,7 +392,7 @@ class ExtractVideoFrames(BaseHandler):
         total_frames = 0
         
         # 使用异步模式的批处理大小
-        batch_size = self.async_config.get('batch_size', 2)
+        batch_size = self.async_config.get('batch_size', 10)
         
         # 处理所有视频文件
         for i in range(0, len(remote_file_paths), batch_size):

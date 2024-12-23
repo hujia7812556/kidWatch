@@ -7,9 +7,23 @@ from ..smb.smb_session_pool import SMBSessionPool
 import time
 from threading import Lock
 import random
+import asyncio
 
 from .file_handler import FileHandler
 from ..config_reader import ConfigReader
+
+
+class AsyncLock:
+    """异步锁实现"""
+    def __init__(self):
+        self._lock = asyncio.Lock()
+
+    async def __aenter__(self):
+        await self._lock.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self._lock.release()
 
 
 class SmbFileHandler(FileHandler, ABC):
@@ -22,6 +36,8 @@ class SmbFileHandler(FileHandler, ABC):
     _password = None
     file_locks = {}  # 用于存储文件锁
     locks_lock = Lock()  # 用于保护file_locks字典的锁
+    async_file_locks = {}  # 用于存储异步文件锁
+    async_locks_lock = Lock()  # 用于保护async_file_locks字典的锁
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -54,6 +70,13 @@ class SmbFileHandler(FileHandler, ABC):
             if path not in self.file_locks:
                 self.file_locks[path] = Lock()
             return self.file_locks[path]
+
+    def _get_async_file_lock(self, path):
+        """获取指定路径的异步文件锁"""
+        with self.async_locks_lock:
+            if path not in self.async_file_locks:
+                self.async_file_locks[path] = AsyncLock()
+            return self.async_file_locks[path]
 
     def list_video_files(self, path=''):
         """列出目录及子目录下的所有video文件"""
@@ -158,3 +181,55 @@ class SmbFileHandler(FileHandler, ABC):
     def get_safe_connections_limit(self):
         """获取安全的并发限制数"""
         return self.session_pool.get_safe_sessions_limit()
+
+    async def async_read(self, path, mode='rb'):
+        """异步读取文件内容
+        
+        Args:
+            path: 文件路径
+            mode: 读取模式，默认为'rb'
+        Returns:
+            bytes: 文件内容
+        """
+        session = None
+        file_lock = self._get_async_file_lock(path)  # 获取该文件的异步锁
+        
+        try:
+            session = self.session_pool.get_session()
+            async with file_lock:  # 使用异步文件锁
+                # 增加重试机制
+                for attempt in range(3):  # 最多重试3次
+                    try:
+                        # 添加随机延迟，避免多个线程同时请求
+                        await asyncio.sleep(random.uniform(0.1, 0.5))
+                        # 使用事件循环执行同步操作
+                        loop = asyncio.get_event_loop()
+                        data = await loop.run_in_executor(
+                            None,
+                            self._sync_read_file,
+                            path,
+                            mode
+                        )
+                        return data
+                    except Exception as e:
+                        if attempt == 2:  # 最后一次尝试
+                            raise
+                        await asyncio.sleep(random.uniform(1, 2))  # 随机等待1-2秒后重试
+        except Exception as e:
+            print(f"异步读取文件失败: {str(e)}")
+            raise
+        finally:
+            if session:
+                self.session_pool.return_session(session)
+
+    def _sync_read_file(self, path, mode):
+        """同步读取文件的内部方法
+        
+        Args:
+            path: 文件路径
+            mode: 读取模式
+        Returns:
+            bytes: 文件内容
+        """
+        with smbclient.open_file(self._get_full_path(path), mode=mode, port=self._port) as file:
+            return file.read()

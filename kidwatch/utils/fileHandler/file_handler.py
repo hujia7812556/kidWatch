@@ -20,3 +20,15 @@ class FileHandler(ABC):
     @abstractmethod
     def path_exists(self, path):
         pass
+
+    @abstractmethod
+    async def async_read(self, path, mode='rb'):
+        """异步读取文件内容
+        
+        Args:
+            path: 文件路径
+            mode: 读取模式，默认为'rb'
+        Returns:
+            bytes: 文件内容
+        """
+        pass
