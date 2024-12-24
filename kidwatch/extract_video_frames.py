@@ -243,7 +243,6 @@ class ExtractVideoFrames(BaseHandler):
                         frames_count = self.capture_frames_with_semaphore(video_path, output_dir)
                         batch_results['frames'] += frames_count
                         batch_results['processed'] += 1
-                        # self.log_print(f"处理视频 {video_path}: 提取了 {frames_count} 帧")
                     except Exception as e:
                         batch_results['failed'].append((video_path, str(e)))
                         self.log_print(f"处理视频 {video_path} 失败: {str(e)}")
@@ -253,7 +252,7 @@ class ExtractVideoFrames(BaseHandler):
                 # 更新总体进度
                 with results_lock:
                     nonlocal processed_count, total_frames
-                    processed_count += batch_results['processed']
+                    processed_count += len(batch)  # 使用批次大小更新进度，包括成功和失败的
                     total_frames += batch_results['frames']
                     failed_videos.extend(batch_results['failed'])
                     progress = (processed_count / total_count) * 100
