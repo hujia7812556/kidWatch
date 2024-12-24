@@ -139,16 +139,40 @@ class ExtractVideoFrames(BaseHandler):
         # 清空输出目录
         self.clear_frames_directory(output_dir)
         
+        # 初始化计数器
+        total_count = len(remote_file_paths)
+        processed_count = 0
+        failed_videos = []
         total_frames = 0
+        
         for remote_file_path in remote_file_paths:
             try:
                 frames_count = self.capture_frames(remote_file_path, output_dir)
                 total_frames += frames_count
-                # self.log_print(f"从 {remote_file_path} 提取了 {frames_count} 帧")
+                processed_count += 1
+                # 输出进度
+                progress = (processed_count / total_count) * 100
+                self.log_print(f"总体进度: {progress:.1f}% ({processed_count}/{total_count})")
             except Exception as e:
+                failed_videos.append((remote_file_path, str(e)))
                 self.log_print(f"处理 {remote_file_path} 时出错: {str(e)}")
+                processed_count += 1
         
-        self.log_print(f"总共提取了 {total_frames} 帧")
+        # 输出最终统计信息
+        self.log_print("\n=== 处理完成 ===")
+        self.log_print(f"总视频数: {total_count}")
+        self.log_print(f"成功处理: {total_count - len(failed_videos)}")
+        self.log_print(f"失败数量: {len(failed_videos)}")
+        self.log_print(f"总提取帧数: {total_frames}")
+        
+        if failed_videos:
+            self.log_print("\n失败的视频:")
+            for video_path, error in failed_videos:
+                self.log_print(f"{video_path}: {error}")
+
+        # 如果失败太多，抛出异常
+        if len(failed_videos) > total_count * 0.3:  # 失败率超过30%
+            raise RuntimeError(f"处理失败率过高: {len(failed_videos)}/{total_count}")
 
     def concurrent_download_video_frames(self, camera=None, date=None, video_list_path=None):
         """并发下载视频帧
