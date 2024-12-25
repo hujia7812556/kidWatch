@@ -6,7 +6,6 @@ import tempfile
 import threading
 import asyncio
 import aiofiles
-# import aiohttp
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .utils.base_handler import BaseHandler
 import pandas as pd
@@ -28,6 +27,9 @@ class ExtractVideoFrames(BaseHandler):
         self.async_config = self.video_frames_config.get('async_mode', {})
         # 获取共用的内存限制
         self.max_memory_gb = self.video_frames_config.get('max_memory_gb', 1.5)
+        # 获取帧存储路径
+        frames_path = self.video_frames_config.get('frames_path', 'data/raw/frames')
+        self.output_dir = os.path.join(self.config_reader.get_root_path(), frames_path)
 
     @property
     def async_semaphore(self):
@@ -133,11 +135,8 @@ class ExtractVideoFrames(BaseHandler):
         else:
             remote_file_paths = self.list_video_files(camera, date)
             
-        root_dir_path = self.config_reader.get_root_path()
-        output_dir = f'{root_dir_path}/data/raw/frames'
-        
         # 清空输出目录
-        self.clear_frames_directory(output_dir)
+        self.clear_frames_directory(self.output_dir)
         
         # 初始化计数器
         total_count = len(remote_file_paths)
@@ -147,7 +146,7 @@ class ExtractVideoFrames(BaseHandler):
         
         for remote_file_path in remote_file_paths:
             try:
-                frames_count = self.capture_frames(remote_file_path, output_dir)
+                frames_count = self.capture_frames(remote_file_path, self.output_dir)
                 total_frames += frames_count
                 processed_count += 1
                 # 输出进度
@@ -190,11 +189,8 @@ class ExtractVideoFrames(BaseHandler):
         else:
             remote_file_paths = self.list_video_files(camera, date)
             
-        root_dir_path = self.config_reader.get_root_path()
-        output_dir = f'{root_dir_path}/data/raw/frames'
-        
         # 清空输出目录
-        self.clear_frames_directory(output_dir)
+        self.clear_frames_directory(self.output_dir)
 
         # 使用并发模式的配置参数
         concurrent_max_workers = self.concurrent_config.get('max_workers', 2)
@@ -203,6 +199,8 @@ class ExtractVideoFrames(BaseHandler):
             self.file_handler.get_safe_connections_limit() // 2,  # SMB连接池限制
             len(remote_file_paths)  # 不超过文件数
         )
+        self.log_print(f"使用线程数: {max_workers}, SMB连接限制: {self.file_handler.get_safe_connections_limit()}, 批处理大小: {self.concurrent_config.get('batch_size', 10)}")
+
         # 初始化任务队列和结果统计
         task_queue = Queue()
         for file_path in remote_file_paths:
@@ -240,7 +238,7 @@ class ExtractVideoFrames(BaseHandler):
                 # 处理这批文件
                 for video_path in batch:
                     try:
-                        frames_count = self.capture_frames_with_semaphore(video_path, output_dir)
+                        frames_count = self.capture_frames_with_semaphore(video_path, self.output_dir)
                         batch_results['frames'] += frames_count
                         batch_results['processed'] += 1
                     except Exception as e:
@@ -402,11 +400,8 @@ class ExtractVideoFrames(BaseHandler):
         else:
             remote_file_paths = self.list_video_files(camera, date)
             
-        root_dir_path = self.config_reader.get_root_path()
-        output_dir = f'{root_dir_path}/data/raw/frames'
-        
         # 清空输出目录
-        self.clear_frames_directory(output_dir)
+        self.clear_frames_directory(self.output_dir)
         
         # 初始化计数器
         total_count = len(remote_file_paths)
@@ -424,7 +419,7 @@ class ExtractVideoFrames(BaseHandler):
             
             for video_path in batch:
                 task = asyncio.create_task(self._process_single_video(
-                    video_path, output_dir, processed_count, total_count))
+                    video_path, self.output_dir, processed_count, total_count))
                 tasks.append(task)
             
             # 等待当前批次完成
